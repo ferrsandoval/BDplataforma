@@ -1,62 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import {
-  ChevronDown,
-  ChevronUp,
-  ArrowLeft,
-  Loader2,
-  Globe,
-  Newspaper,
-  FileText,
-  Database,
-} from "lucide-react";
-import { getProfile } from "../lib/api";
+import { useState } from "react";
+import { ArrowLeft, Globe, Newspaper, FileText, Database, ChevronDown } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { formatDate, formatCurrency, sentimentLabel, sentimentColor, cn } from "../lib/utils";
-import type { EnrichedProfile } from "../lib/types";
 import StatusBadge from "../components/StatusBadge";
-import StatusPoller from "../components/StatusPoller";
 import SourceResult from "../components/SourceResult";
+import { mockProfile } from "../lib/mockData";
+import type { EnrichedProfile } from "../lib/types";
 
-export default function Profile() {
-  const { requestId } = useParams<{ requestId: string }>();
+export default function ExampleProfile() {
   const navigate = useNavigate();
-  const [profile, setProfile] = useState<EnrichedProfile | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const handleUpdate = useCallback((updated: EnrichedProfile) => {
-    setProfile(updated);
-  }, []);
-
-  useEffect(() => {
-    if (!requestId) return;
-    getProfile(requestId)
-      .then(setProfile)
-      .finally(() => setLoading(false));
-  }, [requestId]);
-
-  const isPolling =
-    profile?.status === "pending" || profile?.status === "processing";
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="animate-spin text-[#0B2545]" size={32} />
-      </div>
-    );
-  }
-
-  if (!profile) {
-    return (
-      <div className="p-8 text-center text-slate-500">Perfil no encontrado.</div>
-    );
-  }
+  const profile = mockProfile;
 
   return (
     <div className="p-8 max-w-5xl mx-auto">
-      {requestId && (
-        <StatusPoller requestId={requestId} onUpdate={handleUpdate} active={isPolling} />
-      )}
-
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <button
@@ -78,22 +34,6 @@ export default function Profile() {
           <StatusBadge status={profile.status} />
         </div>
       </div>
-
-      {/* Processing spinner */}
-      {isPolling && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 flex items-center gap-4 mb-6">
-          <Loader2 className="animate-spin text-blue-600 flex-shrink-0" size={24} />
-          <div>
-            <p className="font-medium text-blue-800">Enriquecimiento en proceso…</p>
-            <p className="text-sm text-blue-600 mt-0.5">
-              Consultando fuentes públicas y base de datos interna. Esto puede tardar hasta 30
-              segundos.
-            </p>
-          </div>
-        </div>
-      )}
-
-
 
       {/* Collapsible sections */}
       <div className="space-y-4">
@@ -270,14 +210,14 @@ export default function Profile() {
                         <span
                           className={cn(
                             "text-xs px-2 py-0.5 rounded-full",
-                            l.status === "vigente"
+                            l.status === "active"
                               ? "bg-green-100 text-green-700"
-                              : l.status === "liquidado"
+                              : l.status === "paid"
                               ? "bg-slate-100 text-slate-600"
                               : "bg-red-100 text-red-700"
                           )}
                         >
-                          {l.status}
+                          {l.status === "active" ? "Activo" : l.status === "paid" ? "Pagado" : "Vencido"}
                         </span>
                       </div>
                     </div>
@@ -303,13 +243,11 @@ export default function Profile() {
           </div>
         </CollapsibleSection>
 
-
-
         {/* Sources */}
         {(profile.sources_queried?.length ?? 0) > 0 && (
           <CollapsibleSection
             title="Fuentes consultadas"
-            icon={<Activity size={17} />}
+            icon={<Globe size={17} />}
             count={profile.sources_queried?.length}
             defaultOpen={false}
           >
@@ -338,34 +276,37 @@ function CollapsibleSection({
   children: React.ReactNode;
   defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
-
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
       <button
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-slate-50 transition-colors"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between"
       >
-        <div className="flex items-center gap-2.5">
-          <span className="text-[#C9A85C]">{icon}</span>
-          <span className="font-semibold text-slate-800">{title}</span>
+        <div className="flex items-center gap-2">
+          <div className="text-[#C9A85C]">{icon}</div>
+          <h2 className="font-semibold text-slate-800">{title}</h2>
           {count !== undefined && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
-              {count}
-            </span>
+            <span className="text-xs text-slate-400 ml-1">({count})</span>
           )}
         </div>
-        {open ? (
-          <ChevronUp size={16} className="text-slate-400" />
-        ) : (
-          <ChevronDown size={16} className="text-slate-400" />
-        )}
+        <ChevronDown
+          size={16}
+          className={cn(
+            "text-slate-400 transition-transform",
+            isOpen ? "rotate-0" : "-rotate-90"
+          )}
+        />
       </button>
-      {open && <div className="px-6 pb-5">{children}</div>}
+      {isOpen && <div className="mt-4">{children}</div>}
     </div>
   );
 }
 
 function Empty({ text }: { text: string }) {
-  return <p className="text-sm text-slate-400 py-2">{text}</p>;
+  return (
+    <div className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500 text-center">
+      {text}
+    </div>
+  );
 }

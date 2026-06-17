@@ -1,22 +1,17 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, TrendingUp, Users, Clock, Filter, X, ChevronLeft, ChevronRight } from "lucide-react";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { Plus, Users, Clock, Filter, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { listProfiles, getStats } from "../lib/api";
 import { formatDate } from "../lib/utils";
 import ProfileCard from "../components/ProfileCard";
 import type { ProfileListItem, StatsResponse } from "../lib/types";
 
-const RISK_COLORS = { low: "#22c55e", medium: "#f59e0b", high: "#ef4444" };
-const RISK_LABELS: Record<string, string> = { low: "Bajo", medium: "Medio", high: "Alto" };
-
 interface Filters {
-  risk_level: string;
   date_from: string;
   date_to: string;
 }
 
-const EMPTY_FILTERS: Filters = { risk_level: "", date_from: "", date_to: "" };
+const EMPTY_FILTERS: Filters = { date_from: "", date_to: "" };
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -35,11 +30,12 @@ export default function Dashboard() {
     async (f: Filters, p: number) => {
       setListLoading(true);
       try {
-        const params: Record<string, string | number> = { page: p, limit: LIMIT };
-        if (f.risk_level) params.risk_level = f.risk_level;
-        if (f.date_from) params.date_from = f.date_from;
-        if (f.date_to) params.date_to = f.date_to;
-        const res = await listProfiles(params);
+        const res = await listProfiles({
+          page: p,
+          limit: LIMIT,
+          date_from: f.date_from,
+          date_to: f.date_to,
+        });
         setProfiles(res.items as ProfileListItem[]);
         setTotalPages(res.pages || 1);
         setTotal(res.total || 0);
@@ -75,15 +71,7 @@ export default function Dashboard() {
   }
 
   const hasActiveFilters =
-    appliedFilters.risk_level || appliedFilters.date_from || appliedFilters.date_to;
-
-  const donutData = stats
-    ? [
-        { name: "Bajo", value: stats.risk_distribution.low, color: RISK_COLORS.low },
-        { name: "Medio", value: stats.risk_distribution.medium, color: RISK_COLORS.medium },
-        { name: "Alto", value: stats.risk_distribution.high, color: RISK_COLORS.high },
-      ].filter((d) => d.value > 0)
-    : [];
+    appliedFilters.date_from || appliedFilters.date_to;
 
   return (
     <div className="p-6 lg:p-8">
@@ -103,36 +91,28 @@ export default function Dashboard() {
       </div>
 
       {/* Stats cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-8">
         <StatCard
           label="Total de búsquedas"
           value={loading ? "—" : String(stats?.total_searches ?? 0)}
           icon={<Users size={20} className="text-[#C9A85C]" />}
         />
         <StatCard
-          label="Tiempo promedio"
-          value={loading ? "—" : `${((stats?.avg_processing_time_ms ?? 0) / 1000).toFixed(1)} s`}
+          label="Tiempo promedio de procesamiento"
+          value={loading ? "—" : `${((stats?.avg_processing_time_ms ?? 0) / 1000).toFixed(1)}s`}
           icon={<Clock size={20} className="text-[#C9A85C]" />}
-        />
-        <StatCard
-          label="Perfiles de alto riesgo"
-          value={loading ? "—" : String(stats?.risk_distribution.high ?? 0)}
-          icon={<TrendingUp size={20} className="text-[#C9A85C]" />}
-          highlight
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: list with filter bar + pagination */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold text-slate-700">
-              Búsquedas recientes
-              {!listLoading && total > 0 && (
-                <span className="ml-2 text-sm font-normal text-slate-400">{total} resultados</span>
-              )}
-            </h2>
-          </div>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-slate-700">
+            Búsquedas recientes
+            {!listLoading && total > 0 && (
+              <span className="ml-2 text-sm font-normal text-slate-400">{total} resultados</span>
+            )}
+          </h2>
+        </div>
 
           {/* Filter bar */}
           <div className="bg-white rounded-xl border border-slate-200 p-4">
@@ -140,21 +120,6 @@ export default function Dashboard() {
               <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 self-center">
                 <Filter size={13} />
                 Filtrar
-              </div>
-
-              {/* Risk level */}
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-slate-500">Nivel de riesgo</label>
-                <select
-                  value={filters.risk_level}
-                  onChange={(e) => setFilters((f) => ({ ...f, risk_level: e.target.value }))}
-                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A85C]"
-                >
-                  <option value="">Todos</option>
-                  <option value="low">Bajo</option>
-                  <option value="medium">Medio</option>
-                  <option value="high">Alto</option>
-                </select>
               </div>
 
               {/* Date from */}
@@ -201,11 +166,6 @@ export default function Dashboard() {
             {/* Active filter chips */}
             {hasActiveFilters && (
               <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-slate-100">
-                {appliedFilters.risk_level && (
-                  <span className="inline-flex items-center gap-1 text-xs bg-[#0B2545]/10 text-[#0B2545] px-2 py-0.5 rounded-full">
-                    Riesgo: {RISK_LABELS[appliedFilters.risk_level]}
-                  </span>
-                )}
                 {appliedFilters.date_from && (
                   <span className="inline-flex items-center gap-1 text-xs bg-[#0B2545]/10 text-[#0B2545] px-2 py-0.5 rounded-full">
                     Desde: {appliedFilters.date_from}
@@ -288,55 +248,7 @@ export default function Dashboard() {
             </div>
           )}
         </div>
-
-        {/* Right: Donut chart */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5 h-fit">
-          <h2 className="text-base font-semibold text-slate-700 mb-4">Distribución de riesgo</h2>
-          {donutData.length === 0 ? (
-            <div className="h-48 flex items-center justify-center text-sm text-slate-400">
-              Sin datos aún
-            </div>
-          ) : (
-            <>
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie
-                    data={donutData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={85}
-                    paddingAngle={3}
-                    dataKey="value"
-                  >
-                    {donutData.map((entry) => (
-                      <Cell key={entry.name} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(v) => [`${v} perfiles`]} />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-              {/* Risk level breakdown */}
-              <div className="mt-4 space-y-2">
-                {donutData.map((d) => (
-                  <div key={d.name} className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: d.color }}
-                      />
-                      <span className="text-slate-600">{d.name}</span>
-                    </div>
-                    <span className="font-medium text-slate-900">{d.value}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
       </div>
-    </div>
   );
 }
 

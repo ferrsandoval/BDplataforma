@@ -1,13 +1,11 @@
 import { useNavigate } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { formatDate } from "../lib/utils";
-import RiskBadge from "./RiskBadge";
 import StatusBadge from "./StatusBadge";
 import type { ProfileListItem } from "../lib/types";
 
 export default function ProfileCard({ profile }: { profile: ProfileListItem }) {
   const navigate = useNavigate();
-  const risk = profile.risk_summary?.overall_risk;
 
   return (
     <div
@@ -31,7 +29,6 @@ export default function ProfileCard({ profile }: { profile: ProfileListItem }) {
 
       <div className="flex items-center gap-2 mt-3 flex-wrap">
         <StatusBadge status={profile.status} />
-        {risk && profile.status === "complete" && <RiskBadge level={risk} size="sm" />}
         <span className="text-xs text-slate-400 ml-auto">{formatDate(profile.created_at)}</span>
       </div>
     </div>
