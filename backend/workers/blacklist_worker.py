@@ -37,7 +37,7 @@ def _load_ofac() -> None:
         return
     try:
         headers = {"User-Agent": "Mozilla/5.0 ProfilerMX/1.0"}
-        with httpx.Client(timeout=20, headers=headers, follow_redirects=True) as client:
+        with httpx.Client(timeout=10, headers=headers, follow_redirects=True) as client:
             for url in [OFAC_DOWNLOAD_URL, OFAC_ALT_URL]:
                 try:
                     resp = client.get(url)
@@ -66,7 +66,7 @@ def _load_sat() -> None:
         return
     try:
         headers = {"User-Agent": "Mozilla/5.0 ProfilerMX/1.0"}
-        with httpx.Client(timeout=30, headers=headers, follow_redirects=True) as client:
+        with httpx.Client(timeout=10, headers=headers, follow_redirects=True) as client:
             # Try Art.69 CSV first (smaller, loads faster)
             try:
                 resp = client.get(SAT_ART69_URL)

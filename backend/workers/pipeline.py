@@ -19,21 +19,43 @@ async def run_pipeline_async(request_id: str, persona_data: dict) -> None:
 
     loop = asyncio.get_event_loop()
 
-    persona_data = await loop.run_in_executor(None, _prepare_ai_queries, persona_data)
+    try:
+        persona_data = await asyncio.wait_for(
+            loop.run_in_executor(None, _prepare_ai_queries, persona_data),
+            timeout=15,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("AI query generation timed out")
+
+    async def _timed_worker(kind: str, timeout: int = 30):
+        try:
+            return await asyncio.wait_for(
+                loop.run_in_executor(None, _call_worker, kind, request_id, persona_data),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Worker %s timed out after %ds", kind, timeout)
+            return {}
 
     results = await asyncio.gather(
-        loop.run_in_executor(None, _call_worker, "social", request_id, persona_data),
-        loop.run_in_executor(None, _call_worker, "news", request_id, persona_data),
-        loop.run_in_executor(None, _call_worker, "records", request_id, persona_data),
-        loop.run_in_executor(None, _call_worker, "blacklist", request_id, persona_data),
-        loop.run_in_executor(None, _call_worker, "internal", request_id, persona_data),
+        _timed_worker("social", 30),
+        _timed_worker("news", 30),
+        _timed_worker("records", 45),
+        _timed_worker("blacklist", 20),
+        _timed_worker("internal", 10),
         return_exceptions=True,
     )
 
     worker_results = [r for r in results if isinstance(r, dict)]
     merged = _merge(worker_results)
 
-    merged = await loop.run_in_executor(None, _ai_enrich, persona_data, merged)
+    try:
+        merged = await asyncio.wait_for(
+            loop.run_in_executor(None, _ai_enrich, persona_data, merged),
+            timeout=30,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("AI enrichment timed out")
 
     elapsed_ms = int((time.time() - start) * 1000)
     merged["status"] = "complete"
