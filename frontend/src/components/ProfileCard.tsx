@@ -1,10 +1,16 @@
 import { useNavigate } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Trash2 } from "lucide-react";
 import { formatDate } from "../lib/utils";
 import StatusBadge from "./StatusBadge";
 import type { ProfileListItem } from "../lib/types";
 
-export default function ProfileCard({ profile }: { profile: ProfileListItem }) {
+export default function ProfileCard({
+  profile,
+  onDelete,
+}: {
+  profile: ProfileListItem;
+  onDelete?: (requestId: string) => void;
+}) {
   const navigate = useNavigate();
 
   return (
@@ -21,10 +27,24 @@ export default function ProfileCard({ profile }: { profile: ProfileListItem }) {
             CURP: {profile.input?.curp ?? "—"} &middot; RFC: {profile.input?.rfc ?? "—"}
           </p>
         </div>
-        <ArrowRight
-          size={16}
-          className="text-slate-300 group-hover:text-[#C9A85C] transition-colors mt-0.5 ml-3 flex-shrink-0"
-        />
+        <div className="flex items-center gap-2 ml-3 flex-shrink-0">
+          {onDelete && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(profile.request_id);
+              }}
+              className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+              title="Eliminar búsqueda"
+            >
+              <Trash2 size={15} />
+            </button>
+          )}
+          <ArrowRight
+            size={16}
+            className="text-slate-300 group-hover:text-[#C9A85C] transition-colors mt-0.5"
+          />
+        </div>
       </div>
 
       <div className="flex items-center gap-2 mt-3 flex-wrap">

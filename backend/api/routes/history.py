@@ -1,9 +1,9 @@
 from typing import Optional
-from fastapi import APIRouter, Query, Depends
+from fastapi import APIRouter, Query, Depends, HTTPException
 
 from api.schemas import ProfileListResponse, StatsResponse
 from api.routes.auth import verify_token
-from db.mongo import list_profiles, get_stats
+from db.mongo import list_profiles, get_stats, delete_profile
 
 router = APIRouter()
 
@@ -19,6 +19,14 @@ async def list_profiles_endpoint(
 ):
     result = await list_profiles(page=page, limit=limit, date_from=date_from, date_to=date_to, risk_level=risk_level)
     return result
+
+
+@router.delete("/profile/{request_id}")
+async def delete_profile_endpoint(request_id: str, _user: str = Depends(verify_token)):
+    deleted = await delete_profile(request_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Perfil no encontrado")
+    return {"deleted": True}
 
 
 @router.get("/stats", response_model=StatsResponse)

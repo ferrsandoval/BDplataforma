@@ -28,6 +28,18 @@ def _get_col():
         return None
 
 
+async def delete_profile(request_id: str) -> bool:
+    from services.store import mem_delete
+    if _use_memory():
+        return mem_delete(request_id)
+    col = _get_col()
+    try:
+        result = await col.delete_one({"request_id": request_id})
+        return result.deleted_count > 0
+    except Exception:
+        return mem_delete(request_id)
+
+
 async def create_profile(doc: dict) -> str:
     from services.store import mem_create
     if _use_memory():

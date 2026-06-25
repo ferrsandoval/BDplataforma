@@ -16,6 +16,10 @@ def mem_get(request_id: str) -> Optional[dict]:
     return _profiles.get(request_id)
 
 
+def mem_delete(request_id: str) -> bool:
+    return _profiles.pop(request_id, None) is not None
+
+
 def mem_update(request_id: str, update: dict) -> None:
     if request_id in _profiles:
         _profiles[request_id].update(update)

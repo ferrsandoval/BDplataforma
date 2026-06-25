@@ -62,6 +62,10 @@ export async function listProfiles(params: {
   return response.data;
 }
 
+export async function deleteProfile(requestId: string): Promise<void> {
+  await client.delete(`/profile/${requestId}`);
+}
+
 export async function getStats(): Promise<StatsResponse> {
   const response = await client.get("/stats");
   return response.data;

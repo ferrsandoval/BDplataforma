@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Users, Clock, Filter, X, ChevronLeft, ChevronRight } from "lucide-react";
-import { listProfiles, getStats } from "../lib/api";
+import { listProfiles, getStats, deleteProfile } from "../lib/api";
 import { formatDate } from "../lib/utils";
 import ProfileCard from "../components/ProfileCard";
 import type { ProfileListItem, StatsResponse } from "../lib/types";
@@ -68,6 +68,18 @@ export default function Dashboard() {
   function goToPage(p: number) {
     setPage(p);
     fetchProfiles(appliedFilters, p);
+  }
+
+  async function handleDelete(requestId: string) {
+    if (!window.confirm("¿Eliminar esta búsqueda?")) return;
+    try {
+      await deleteProfile(requestId);
+      fetchProfiles(appliedFilters, page);
+      const newStats = await getStats();
+      setStats(newStats);
+    } catch {
+      alert("Error al eliminar");
+    }
   }
 
   const hasActiveFilters =
@@ -196,7 +208,7 @@ export default function Dashboard() {
           ) : (
             <div className="space-y-3">
               {profiles.map((p) => (
-                <ProfileCard key={p.request_id} profile={p} />
+                <ProfileCard key={p.request_id} profile={p} onDelete={handleDelete} />
               ))}
             </div>
           )}
