@@ -135,14 +135,17 @@ def generate_search_queries(person_info: dict) -> Optional[dict]:
         '"news":["q1","q2","q3"],'
         '"records":["q1","q2","q3"]}\n\n'
         "Reglas:\n"
+        "- SIEMPRE usa el nombre completo entre comillas dobles para búsqueda exacta, "
+        'ejemplo: "FERNANDO DE JESUS SANDOVAL LOPEZ"\n'
         "- Redes sociales: usa site:linkedin.com/in, site:facebook.com, etc. "
-        "Combina nombre con estado/ciudad si se conoce. Genera variantes (con/sin segundo nombre)\n"
-        "- Noticias: nombre completo entre comillas, también prueba solo nombre+apellido_paterno. "
+        'Ejemplo: site:linkedin.com/in "NOMBRE COMPLETO"\n'
+        "- Noticias: nombre completo entre comillas. "
         "Si hay estado conocido, agrega el nombre del estado\n"
         "- Registros: busca en site:dof.gob.mx, site:sat.gob.mx, site:imss.gob.mx. "
-        "Usa nombre, CURP o RFC según estén disponibles\n"
+        "Usa nombre entre comillas, CURP o RFC según estén disponibles\n"
         "- Máximo 2 queries por red social, 3 para noticias, 3 para registros\n"
-        "- Todos los queries deben ser strings listos para buscar en DuckDuckGo"
+        "- Todos los queries deben ser strings listos para buscar en DuckDuckGo\n"
+        "- NUNCA separes el nombre en partes sueltas, siempre búsqueda exacta con comillas"
     )
 
     text = _call(system, prompt, max_tokens=700)

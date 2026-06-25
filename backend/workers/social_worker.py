@@ -99,9 +99,11 @@ def scrape_social(self, request_id: str, persona_data: dict) -> dict:
     ai_social = (persona_data.get("ai_queries") or {}).get("social", {})
 
     for platform, query_tpl in PLATFORM_QUERIES.items():
-        queries = ai_social.get(platform, [query_tpl.format(nombre=nombre)])
-        if isinstance(queries, str):
-            queries = [queries]
+        exact_query = query_tpl.format(nombre=nombre)
+        ai_queries = ai_social.get(platform, [])
+        if isinstance(ai_queries, str):
+            ai_queries = [ai_queries]
+        queries = [exact_query] + [q for q in ai_queries if q != exact_query]
 
         t0 = time.time()
         found = False

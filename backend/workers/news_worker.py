@@ -139,10 +139,10 @@ def scrape_news(self, request_id: str, persona_data: dict) -> dict:
             ],
         }
 
-    # Términos de búsqueda: AI queries si existen, si no el nombre/CURP/RFC
+    # Nombre exacto primero, luego AI queries como fallback
     ai_news = (persona_data.get("ai_queries") or {}).get("news", [])
     default_term = nombre if tiene_nombre else (curp if curp else rfc)
-    search_terms = ai_news if ai_news else [default_term]
+    search_terms = [default_term] + [q for q in ai_news if q != default_term]
 
     # ── DuckDuckGo News (primario) ────────────────────────────────────────
     t0 = time.time()
