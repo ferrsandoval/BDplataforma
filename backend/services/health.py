@@ -36,18 +36,29 @@ def _parse_host_port(url: str, default_port: int) -> tuple[str, int]:
         return "localhost", default_port
 
 
+def _mongo_ping(url: str, timeout: float = 5.0) -> bool:
+    """Ping MongoDB using pymongo — works with both standard and SRV URIs."""
+    try:
+        from pymongo import MongoClient
+        client = MongoClient(url, serverSelectionTimeoutMS=int(timeout * 1000))
+        client.admin.command("ping")
+        client.close()
+        return True
+    except Exception:
+        return False
+
+
 async def detect_services() -> None:
     global MONGO_OK, REDIS_OK, POSTGRES_OK
     from config import settings
 
     loop = asyncio.get_event_loop()
 
-    mongo_host, mongo_port = _parse_host_port(settings.mongodb_url, 27017)
     redis_host, redis_port = _parse_host_port(settings.redis_url, 6379)
     pg_host, pg_port = _parse_host_port(settings.postgres_url, 5432)
 
     MONGO_OK, REDIS_OK, POSTGRES_OK = await asyncio.gather(
-        loop.run_in_executor(None, _tcp_reachable, mongo_host, mongo_port, 1.0),
+        loop.run_in_executor(None, _mongo_ping, settings.mongodb_url, 5.0),
         loop.run_in_executor(None, _tcp_reachable, redis_host, redis_port, 1.0),
         loop.run_in_executor(None, _tcp_reachable, pg_host, pg_port, 1.0),
     )
