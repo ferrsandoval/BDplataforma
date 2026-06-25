@@ -213,8 +213,10 @@ def filter_and_analyze(person_info: dict, merged: dict) -> dict:
         '{"social_keep":[0,2],"news_keep":[0,1],"records_keep":[0],'
         '"news_sentiments":{"0":"negative","1":"neutral"}}\n\n'
         "Reglas:\n"
-        "- Solo conserva resultados que claramente pertenezcan a esta persona\n"
-        "- Si no puedes determinar con certeza, consérvalo\n"
+        "- CONSERVA los resultados a menos que estés SEGURO de que pertenecen a otra persona\n"
+        "- En caso de duda, SIEMPRE conserva el resultado\n"
+        "- Redes sociales: conserva si el nombre coincide parcialmente (nombre + al menos un apellido)\n"
+        "- Registros públicos: conserva si mencionan el nombre, CURP o RFC de la persona\n"
         "- Para sentimiento: positive, neutral o negative basado en el titular"
     )
 
@@ -239,11 +241,22 @@ def filter_and_analyze(person_info: dict, merged: dict) -> dict:
                 n = {**n, "sentiment": s}
             filtered_news.append(n)
 
+    filtered_social = [s for i, s in enumerate(social) if i in keep_s]
+    filtered_records = [r for i, r in enumerate(records) if i in keep_r]
+
+    # Safety: if AI filtered everything out, keep originals
+    if social and not filtered_social:
+        filtered_social = social
+    if records and not filtered_records:
+        filtered_records = records
+    if news and not filtered_news:
+        filtered_news = news
+
     result = {**merged}
     result["public_profile"] = {
-        "social_media": [s for i, s in enumerate(social) if i in keep_s],
+        "social_media": filtered_social,
         "news_mentions": filtered_news,
-        "public_records": [r for i, r in enumerate(records) if i in keep_r],
+        "public_records": filtered_records,
     }
     return result
 
