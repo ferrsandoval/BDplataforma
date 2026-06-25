@@ -1,18 +1,15 @@
 """
 Public records worker — searches:
-  1. DOF (Diario Oficial de la Federación) via DuckDuckGo site search
-  2. SIDOF open data API (direct)
-  3. RPP mentions via web search
-  4. IMSS/SAT mentions via web search
+  1. DOF via SIDOF API + DDG (por nombre)
+  2. RPP, IMSS, SAT por nombre
+  3. DOF, IMSS, SAT por CURP
+  4. SAT, DOF por RFC
 """
 import time
 import httpx
-import urllib.parse
-from bs4 import BeautifulSoup
+from services.search import web_search
 from workers.celery_app import celery
 
-DDG_URL = "https://html.duckduckgo.com/html/?q={q}"
-SIDOF_SEARCH_URL = "https://sidof.segob.gob.mx/busquedaAvanzada/busqueda"
 SIDOF_API_URL = "https://sidof.segob.gob.mx/datos_abiertos/busquedaTexto"
 
 HEADERS = {
@@ -22,10 +19,9 @@ HEADERS = {
         "Chrome/120.0.0.0 Safari/537.36"
     ),
     "Accept-Language": "es-MX,es;q=0.9",
-    "Accept": "text/html,application/xhtml+xml,*/*",
 }
 
-RECORD_SOURCES = [
+NOMBRE_SOURCES = [
     {
         "name": "DOF",
         "query": 'site:dof.gob.mx "{nombre}"',
@@ -48,39 +44,79 @@ RECORD_SOURCES = [
     },
 ]
 
+CURP_SOURCES = [
+    {
+        "name": "DOF CURP",
+        "query": 'site:dof.gob.mx "{curp}"',
+        "type": "DOF CURP",
+    },
+    {
+        "name": "IMSS CURP",
+        "query": '"{curp}" IMSS México',
+        "type": "IMSS CURP",
+    },
+    {
+        "name": "RENAPO CURP",
+        "query": '"{curp}" RENAPO México',
+        "type": "RENAPO CURP",
+    },
+]
 
-def _ddg_search(query: str, max_results: int = 5) -> list[dict]:
-    q = urllib.parse.quote_plus(query)
-    url = DDG_URL.format(q=q)
-    with httpx.Client(timeout=12, headers=HEADERS, follow_redirects=True) as client:
-        resp = client.get(url)
-        resp.raise_for_status()
+RFC_SOURCES = [
+    {
+        "name": "SAT RFC",
+        "query": 'site:sat.gob.mx "{rfc}"',
+        "type": "SAT RFC",
+    },
+    {
+        "name": "DOF RFC",
+        "query": 'site:dof.gob.mx "{rfc}"',
+        "type": "DOF RFC",
+    },
+    {
+        "name": "Web RFC",
+        "query": '"{rfc}" empresa razón social México',
+        "type": "Directorio Fiscal",
+    },
+]
 
-    soup = BeautifulSoup(resp.text, "html.parser")
-    results = []
-    for div in soup.select(".result__body, .web-result")[:max_results]:
-        a = div.select_one("a.result__a, h2 a")
-        snippet = div.select_one(".result__snippet, .result__description")
-        url_tag = div.select_one(".result__url")
-        if not a:
-            continue
-        href = a.get("href", "")
-        if "uddg=" in href:
-            try:
-                href = urllib.parse.unquote(href.split("uddg=")[1].split("&")[0])
-            except Exception:
-                pass
-        results.append({
-            "title": a.get_text(strip=True),
-            "url": href,
-            "snippet": snippet.get_text(strip=True) if snippet else "",
-            "display_url": url_tag.get_text(strip=True) if url_tag else "",
-        })
-    return results
+EMPLEO_NOMBRE_SOURCES = [
+    {
+        "name": "Servidor Público",
+        "query": '"{nombre}" "servidor público" nombramiento gobierno México',
+        "type": "Servidor Público",
+    },
+    {
+        "name": "DeclaraNet",
+        "query": 'site:declaranet.gob.mx "{nombre}"',
+        "type": "Declaración Patrimonial",
+    },
+    {
+        "name": "Nómina Gobierno",
+        "query": '"{nombre}" nómina gobierno federal secretaría México',
+        "type": "Nómina Gobierno",
+    },
+]
+
+EMPLEO_CURP_SOURCES = [
+    {
+        "name": "NSS CURP",
+        "query": '"{curp}" NSS "número de seguridad social"',
+        "type": "NSS",
+    },
+    {
+        "name": "IMSS Alta",
+        "query": '"{curp}" IMSS alta patronal asegurado',
+        "type": "IMSS Estatus",
+    },
+]
+
+
+def _search(query: str, max_results: int = 3) -> list[dict]:
+    return web_search(query, max_results=max_results)
 
 
 def _try_sidof_api(nombre: str) -> list[dict]:
-    """Try SIDOF's open data search endpoint."""
     try:
         params = {"palabrasTodas": nombre, "pagina": 1, "cantidad": 10}
         with httpx.Client(timeout=10, headers=HEADERS, follow_redirects=True) as client:
@@ -102,60 +138,31 @@ def _try_sidof_api(nombre: str) -> list[dict]:
 
 
 def _ddg_to_record(result: dict, record_type: str, source_name: str) -> dict:
+    url = result.get("href", "")
+    title = result.get("title", "")
+    snippet = result.get("body", "")
     return {
         "type": record_type,
         "source": source_name,
         "date": None,
-        "description": f"{result['title']} — {result['snippet']}"[:300],
-        "url": result["url"] if result["url"].startswith("http") else None,
+        "description": f"{title} — {snippet}"[:300],
+        "url": url if url.startswith("http") else None,
     }
 
 
-@celery.task(
-    name="workers.records_worker.scrape_records",
-    bind=True,
-    max_retries=1,
-    soft_time_limit=30,
-)
-def scrape_records(self, request_id: str, persona_data: dict) -> dict:
-    nombre = (persona_data.get("nombre_completo") or "").strip()
-    curp = (persona_data.get("curp") or "").strip()
-    rfc = (persona_data.get("rfc") or "").strip()
-    sources = []
-    records = []
-    judicial = False
-
-    if not nombre:
-        return {
-            "public_profile": {"social_media": [], "news_mentions": [], "public_records": []},
-            "internal_history": {"loans": [], "payment_score": None, "references": []},
-            "risk_summary": {"blacklist_hit": False, "judicial_records": False},
-            "sources_queried": [],
-        }
-
-    # ── SIDOF direct API (DOF) ────────────────────────────────────────────
-    t0 = time.time()
-    sidof_records = _try_sidof_api(nombre)
-    elapsed = int((time.time() - t0) * 1000)
-    if sidof_records:
-        records.extend(sidof_records)
-        sources.append({"source": "DOF SIDOF", "status": "success", "duration_ms": elapsed})
-    else:
-        sources.append({"source": "DOF SIDOF", "status": "not_found", "duration_ms": elapsed})
-
-    # ── DuckDuckGo site searches ─────────────────────────────────────────
-    for src in RECORD_SOURCES:
-        query = src["query"].format(nombre=nombre, curp=curp, rfc=rfc)
+def _search_sources(source_list: list[dict], fmt: dict, records: list, sources: list, judicial: bool) -> bool:
+    for src in source_list:
+        query = src["query"].format(**fmt)
         t0 = time.time()
         try:
-            results = _ddg_search(query, max_results=3)
+            results = _search(query, max_results=3)
             elapsed = int((time.time() - t0) * 1000)
             found = False
             for r in results:
-                if r["url"] and r["title"]:
+                if r.get("href") and r.get("title"):
                     rec = _ddg_to_record(r, src["type"], src["name"])
                     records.append(rec)
-                    if "judicial" in src["type"].lower() or "sentencia" in r["title"].lower():
+                    if "sentencia" in r.get("title", "").lower():
                         judicial = True
                     found = True
             sources.append({
@@ -166,8 +173,93 @@ def scrape_records(self, request_id: str, persona_data: dict) -> dict:
         except Exception:
             elapsed = int((time.time() - t0) * 1000)
             sources.append({"source": src["name"], "status": "error", "duration_ms": elapsed})
+        time.sleep(0.5)
+    return judicial
 
-        time.sleep(1)  # rate limit: 1 req/sec per domain
+
+@celery.task(
+    name="workers.records_worker.scrape_records",
+    bind=True,
+    max_retries=1,
+    soft_time_limit=90,
+)
+def scrape_records(self, request_id: str, persona_data: dict) -> dict:
+    nombre = (persona_data.get("nombre_completo") or "").strip()
+    tiene_apellido = bool(
+        (persona_data.get("apellido_paterno") or "").strip()
+        or (persona_data.get("apellido_materno") or "").strip()
+    )
+    curp = (persona_data.get("curp") or "").strip()
+    rfc = (persona_data.get("rfc") or "").strip()
+    sources = []
+    records = []
+    judicial = False
+
+    tiene_nombre = bool(nombre and tiene_apellido)
+
+    if not tiene_nombre and not curp and not rfc:
+        return {
+            "public_profile": {"social_media": [], "news_mentions": [], "public_records": []},
+            "internal_history": {"loans": [], "payment_score": None, "references": []},
+            "risk_summary": {"blacklist_hit": False, "judicial_records": False},
+            "sources_queried": [],
+        }
+
+    fmt = {"nombre": nombre, "curp": curp, "rfc": rfc}
+
+    # ── Búsquedas por nombre ──────────────────────────────────────────────
+    if tiene_nombre:
+        t0 = time.time()
+        sidof_records = _try_sidof_api(nombre)
+        elapsed = int((time.time() - t0) * 1000)
+        if sidof_records:
+            records.extend(sidof_records)
+            sources.append({"source": "DOF SIDOF", "status": "success", "duration_ms": elapsed})
+        else:
+            sources.append({"source": "DOF SIDOF", "status": "not_found", "duration_ms": elapsed})
+
+        judicial = _search_sources(NOMBRE_SOURCES, fmt, records, sources, judicial)
+
+    # ── Búsquedas por CURP ───────────────────────────────────────────────
+    if curp:
+        judicial = _search_sources(CURP_SOURCES, fmt, records, sources, judicial)
+
+    # ── Búsquedas por RFC ────────────────────────────────────────────────
+    if rfc:
+        judicial = _search_sources(RFC_SOURCES, fmt, records, sources, judicial)
+
+    # ── Búsquedas de empleo por nombre ─────────────────────────────────
+    if tiene_nombre:
+        judicial = _search_sources(EMPLEO_NOMBRE_SOURCES, fmt, records, sources, judicial)
+
+    # ── Búsquedas de empleo por CURP ────────────────────────────────────
+    if curp:
+        judicial = _search_sources(EMPLEO_CURP_SOURCES, fmt, records, sources, judicial)
+
+    # ── Búsquedas adicionales con queries IA ─────────────────────────────
+    ai_records = (persona_data.get("ai_queries") or {}).get("records", [])
+    for q in ai_records:
+        t0 = time.time()
+        try:
+            results = _search(q, max_results=3)
+            elapsed = int((time.time() - t0) * 1000)
+            found = False
+            for r in results:
+                if r.get("href") and r.get("title"):
+                    rec = _ddg_to_record(r, "Registro IA", "Búsqueda IA")
+                    records.append(rec)
+                    if "sentencia" in r.get("title", "").lower():
+                        judicial = True
+                    found = True
+            sources.append({
+                "source": "IA Records",
+                "status": "success" if found else "not_found",
+                "duration_ms": elapsed,
+            })
+        except Exception:
+            elapsed = int((time.time() - t0) * 1000)
+            sources.append({"source": "IA Records", "status": "error", "duration_ms": elapsed})
+        time.sleep(0.5)
 
     return {
         "public_profile": {

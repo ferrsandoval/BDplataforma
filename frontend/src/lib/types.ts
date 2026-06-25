@@ -41,6 +41,14 @@ export interface Reference {
   phone: string;
 }
 
+export interface EmploymentInfo {
+  is_government_employee?: boolean | null;
+  government_entity?: string | null;
+  nss?: string | null;
+  employment_status?: string | null;
+  evidence: string[];
+}
+
 export interface PublicProfileData {
   social_media: SocialMediaEntry[];
   news_mentions: NewsMention[];
@@ -65,6 +73,8 @@ export interface EnrichedProfile {
   status: ProfileStatus;
   processing_duration_ms?: number;
   input: Record<string, unknown>;
+  ai_summary?: string;
+  employment_info?: EmploymentInfo;
   public_profile: PublicProfileData;
   internal_history: InternalHistory;
   sources_queried: SourceStatusEntry[];
@@ -90,7 +100,9 @@ export interface StatsResponse {
 }
 
 export interface EnrichmentRequest {
-  nombre_completo?: string;
+  nombre?: string;
+  apellido_paterno?: string;
+  apellido_materno?: string;
   curp?: string;
   rfc?: string;
   telefono?: string;

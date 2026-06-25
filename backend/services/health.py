@@ -53,7 +53,7 @@ async def detect_services() -> None:
     )
 
     status = []
-    status.append(f"MongoDB={'✓' if MONGO_OK else '✗ (memoria)'}")
-    status.append(f"Redis={'✓' if REDIS_OK else '✗ (BackgroundTasks)'}")
-    status.append(f"PostgreSQL={'✓' if POSTGRES_OK else '✗ (omitido)'}")
+    status.append(f"MongoDB={'OK' if MONGO_OK else 'OFF (memoria)'}")
+    status.append(f"Redis={'OK' if REDIS_OK else 'OFF (BackgroundTasks)'}")
+    status.append(f"PostgreSQL={'OK' if POSTGRES_OK else 'OFF (omitido)'}")
     print(f"[ProfilerMX] Servicios: {' | '.join(status)}")

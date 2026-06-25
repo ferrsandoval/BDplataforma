@@ -1,12 +1,13 @@
 """
-News worker — queries Google News RSS for Mexican news about the subject.
-Real implementation using httpx + stdlib XML parser. No API key required.
+News worker — queries DuckDuckGo News (primary) and Google News RSS (fallback)
+for Mexican news about the subject. No API key required.
 """
 import time
 import httpx
 import urllib.parse
 from xml.etree import ElementTree as ET
 from datetime import datetime
+from services.search import news_search
 from workers.celery_app import celery
 
 GOOGLE_NEWS_URL = (
@@ -51,33 +52,24 @@ def _parse_rss_date(raw: str) -> str | None:
     return raw[:10] if raw else None
 
 
-def _source_name(url: str) -> str:
-    try:
-        from urllib.parse import urlparse
-        host = urlparse(url).netloc.lower()
-        host = host.replace("www.", "")
-        known = {
-            "eluniversal.com.mx": "El Universal",
-            "reforma.com": "Reforma",
-            "milenio.com": "Milenio",
-            "jornada.com.mx": "La Jornada",
-            "expansion.mx": "Expansión",
-            "excelsior.com.mx": "Excélsior",
-            "proceso.com.mx": "Proceso",
-            "informador.mx": "El Informador",
-            "heraldo.mx": "El Heraldo",
-            "forbes.com.mx": "Forbes México",
-        }
-        for domain, name in known.items():
-            if domain in host:
-                return name
-        parts = host.split(".")
-        return parts[0].capitalize() if parts else host
-    except Exception:
-        return "Fuente desconocida"
+def _fetch_news(query: str, max_results: int = 15) -> list[dict]:
+    raw = news_search(query, max_results=max_results)
+    results = []
+    for item in raw:
+        title = (item.get("title") or "").strip()
+        if not title:
+            continue
+        results.append({
+            "title": title,
+            "source": item.get("source", "Fuente desconocida"),
+            "date": item.get("date"),
+            "url": item.get("url"),
+            "sentiment": _classify_sentiment(title + " " + (item.get("body") or "")),
+        })
+    return results
 
 
-def _fetch_google_news(nombre: str) -> list:
+def _fetch_google_news(nombre: str) -> list[dict]:
     q = urllib.parse.quote(f'"{nombre}"')
     url = GOOGLE_NEWS_URL.format(q=q)
     headers = {
@@ -103,24 +95,18 @@ def _fetch_google_news(nombre: str) -> list:
         title = (item.findtext("title") or "").strip()
         link = (item.findtext("link") or "").strip()
         pub_date = (item.findtext("pubDate") or "").strip()
-
         source_elem = item.find("source")
-        if source_elem is not None and source_elem.text:
-            source = source_elem.text.strip()
-        else:
-            source = _source_name(link)
+        source = (source_elem.text or "").strip() if source_elem is not None else "Google Noticias"
 
         if not title:
             continue
-
         results.append({
             "title": title,
             "source": source,
             "date": _parse_rss_date(pub_date),
-            "url": link,
+            "url": link or None,
             "sentiment": _classify_sentiment(title),
         })
-
     return results
 
 
@@ -128,33 +114,69 @@ def _fetch_google_news(nombre: str) -> list:
     name="workers.news_worker.scrape_news",
     bind=True,
     max_retries=1,
-    soft_time_limit=30,
+    soft_time_limit=45,
 )
 def scrape_news(self, request_id: str, persona_data: dict) -> dict:
     nombre = (persona_data.get("nombre_completo") or "").strip()
+    tiene_apellido = bool(
+        (persona_data.get("apellido_paterno") or "").strip()
+        or (persona_data.get("apellido_materno") or "").strip()
+    )
+    curp = (persona_data.get("curp") or "").strip()
+    rfc = (persona_data.get("rfc") or "").strip()
     sources = []
     news_results = []
 
-    if not nombre:
+    tiene_nombre = bool(nombre and tiene_apellido)
+
+    if not tiene_nombre and not curp and not rfc:
         return {
             "public_profile": {"social_media": [], "news_mentions": [], "public_records": []},
             "internal_history": {"loans": [], "payment_score": None, "references": []},
             "risk_summary": {"blacklist_hit": False, "judicial_records": False},
             "sources_queried": [
-                {"source": "Google Noticias MX", "status": "not_found", "duration_ms": 0}
+                {"source": "Noticias", "status": "not_found", "duration_ms": 0}
             ],
         }
 
+    # Términos de búsqueda: AI queries si existen, si no el nombre/CURP/RFC
+    ai_news = (persona_data.get("ai_queries") or {}).get("news", [])
+    default_term = nombre if tiene_nombre else (curp if curp else rfc)
+    search_terms = ai_news if ai_news else [default_term]
+
+    # ── DuckDuckGo News (primario) ────────────────────────────────────────
     t0 = time.time()
     try:
-        items = _fetch_google_news(nombre)
+        for term in search_terms:
+            items = _fetch_news(f'"{term}"')
+            news_results.extend(items)
+            if items:
+                break
+            time.sleep(0.3)
         elapsed = int((time.time() - t0) * 1000)
-        news_results.extend(items)
-        status = "success" if items else "not_found"
-        sources.append({"source": "Google Noticias MX", "status": status, "duration_ms": elapsed})
-    except Exception as exc:
+        sources.append({
+            "source": "DDG Noticias",
+            "status": "success" if news_results else "not_found",
+            "duration_ms": elapsed,
+        })
+    except Exception:
         elapsed = int((time.time() - t0) * 1000)
-        sources.append({"source": "Google Noticias MX", "status": "error", "duration_ms": elapsed})
+        sources.append({"source": "DDG Noticias", "status": "error", "duration_ms": elapsed})
+
+        # ── Google News RSS (fallback) ────────────────────────────────────
+        t0 = time.time()
+        try:
+            items = _fetch_google_news(default_term)
+            elapsed = int((time.time() - t0) * 1000)
+            news_results.extend(items)
+            sources.append({
+                "source": "Google Noticias MX",
+                "status": "success" if items else "not_found",
+                "duration_ms": elapsed,
+            })
+        except Exception:
+            elapsed = int((time.time() - t0) * 1000)
+            sources.append({"source": "Google Noticias MX", "status": "error", "duration_ms": elapsed})
 
     return {
         "public_profile": {

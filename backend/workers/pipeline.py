@@ -4,10 +4,13 @@ Used as fallback when Celery/Redis is not available (dev mode).
 """
 import time
 import asyncio
+import logging
 
 from services.normalizer import normalize
 from services.scorer import compute_risk
 from db.mongo import update_profile
+
+logger = logging.getLogger(__name__)
 
 
 async def run_pipeline_async(request_id: str, persona_data: dict) -> None:
@@ -15,6 +18,9 @@ async def run_pipeline_async(request_id: str, persona_data: dict) -> None:
     start = time.time()
 
     loop = asyncio.get_event_loop()
+
+    persona_data = await loop.run_in_executor(None, _prepare_ai_queries, persona_data)
+
     results = await asyncio.gather(
         loop.run_in_executor(None, _call_worker, "social", request_id, persona_data),
         loop.run_in_executor(None, _call_worker, "news", request_id, persona_data),
@@ -24,14 +30,61 @@ async def run_pipeline_async(request_id: str, persona_data: dict) -> None:
         return_exceptions=True,
     )
 
-    elapsed_ms = int((time.time() - start) * 1000)
-
     worker_results = [r for r in results if isinstance(r, dict)]
     merged = _merge(worker_results)
+
+    merged = await loop.run_in_executor(None, _ai_enrich, persona_data, merged)
+
+    elapsed_ms = int((time.time() - start) * 1000)
     merged["status"] = "complete"
     merged["processing_duration_ms"] = elapsed_ms
 
     await update_profile(request_id, merged)
+
+
+def _prepare_ai_queries(persona_data: dict) -> dict:
+    """Generate AI-optimized search queries and inject them into persona_data."""
+    try:
+        from services.ai_analyzer import generate_search_queries
+        queries = generate_search_queries(persona_data)
+        if queries:
+            persona_data = {**persona_data, "ai_queries": queries}
+            logger.info("AI queries generated: %s", list(queries.keys()))
+    except Exception:
+        logger.exception("AI query generation failed, using defaults")
+    return persona_data
+
+
+def _ai_enrich(persona_data: dict, merged: dict) -> dict:
+    """AI post-processing: filter relevance, re-score sentiment, extract employment, generate summary."""
+    try:
+        from services.ai_analyzer import filter_and_analyze, generate_summary, extract_employment_info
+
+        merged = filter_and_analyze(persona_data, merged)
+
+        pp = merged.get("public_profile", {})
+        ih = merged.get("internal_history", {})
+        risk = merged.get("risk_summary", {})
+        new_risk = compute_risk(
+            blacklist_hit=risk.get("blacklist_hit", False),
+            judicial_records=risk.get("judicial_records", False),
+            social_count=len(pp.get("social_media", [])),
+            payment_score=ih.get("payment_score"),
+            news_sentiments=[n.get("sentiment") for n in pp.get("news_mentions", [])],
+            loans=ih.get("loans", []),
+        )
+        merged["risk_summary"] = new_risk
+
+        employment = extract_employment_info(persona_data, merged)
+        if employment:
+            merged["employment_info"] = employment
+
+        summary = generate_summary(persona_data, merged)
+        if summary:
+            merged["ai_summary"] = summary
+    except Exception:
+        logger.exception("AI enrichment failed, continuing with raw results")
+    return merged
 
 
 def _call_worker(kind: str, request_id: str, persona_data: dict) -> dict:

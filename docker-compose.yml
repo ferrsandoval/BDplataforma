@@ -52,14 +52,15 @@ services:
       - "8000:8000"
     environment:
       REDIS_URL: redis://redis:6379
-      MONGODB_URL: mongodb://mongo:27017
+      MONGODB_URL: ${MONGODB_URL:-mongodb://mongo:27017}
       MONGODB_DB: profilermx
       POSTGRES_URL: postgresql://profilermx:profilermx_pass@postgres:5432/profilermx
       OFAC_API_KEY: ""
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GOOGLE_CX: ${GOOGLE_CX:-}
     depends_on:
       redis:
-        condition: service_healthy
-      mongo:
         condition: service_healthy
       postgres:
         condition: service_healthy
@@ -73,14 +74,15 @@ services:
       dockerfile: Dockerfile
     environment:
       REDIS_URL: redis://redis:6379
-      MONGODB_URL: mongodb://mongo:27017
+      MONGODB_URL: ${MONGODB_URL:-mongodb://mongo:27017}
       MONGODB_DB: profilermx
       POSTGRES_URL: postgresql://profilermx:profilermx_pass@postgres:5432/profilermx
       OFAC_API_KEY: ""
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GOOGLE_CX: ${GOOGLE_CX:-}
     depends_on:
       redis:
-        condition: service_healthy
-      mongo:
         condition: service_healthy
       postgres:
         condition: service_healthy
@@ -95,7 +97,7 @@ services:
     ports:
       - "5173:5173"
     environment:
-      VITE_API_URL: http://localhost:8000
+      VITE_API_URL: http://localhost:8000/api
     depends_on:
       - backend
     volumes:

@@ -119,7 +119,7 @@ def _fuzzy_match(nombre: str, name_list: list[str], threshold: int = 88) -> list
     if not name_list or not nombre:
         return []
     needle = nombre.upper().strip()
-    matches = rf_process.extractBests(
+    matches = rf_process.extract(
         needle,
         name_list,
         scorer=fuzz.token_sort_ratio,

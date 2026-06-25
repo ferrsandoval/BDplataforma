@@ -1,66 +1,45 @@
 """
-Social media worker — finds public social profiles using DuckDuckGo HTML search.
-No Playwright required. Returns profile links for operator review.
+Social media worker — finds public social profiles using DuckDuckGo Search (DDGS).
+Returns profile links for operator review.
 """
 import time
-import httpx
-import urllib.parse
-from bs4 import BeautifulSoup
+from services.search import web_search
 from workers.celery_app import celery
 
-DDG_URL = "https://html.duckduckgo.com/html/?q={q}"
-
 PLATFORM_QUERIES = {
-    "LinkedIn": 'site:linkedin.com/in "{nombre}"',
+    "LinkedIn": 'site:linkedin.com/in "{nombre}" México',
     "Facebook": 'site:facebook.com "{nombre}" México',
-    "Instagram": 'site:instagram.com "{nombre}"',
-    "Twitter/X": 'site:x.com OR site:twitter.com "{nombre}" México',
-}
-
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    ),
-    "Accept-Language": "es-MX,es;q=0.9",
-    "Accept": "text/html,application/xhtml+xml",
+    "Instagram": 'site:instagram.com "{nombre}" México',
+    "Twitter/X": 'site:x.com "{nombre}" México',
 }
 
 
-def _ddg_search(query: str, max_results: int = 5) -> list[dict]:
-    q = urllib.parse.quote_plus(query)
-    url = DDG_URL.format(q=q)
-    with httpx.Client(timeout=12, headers=HEADERS, follow_redirects=True) as client:
-        resp = client.get(url)
-        resp.raise_for_status()
-
-    soup = BeautifulSoup(resp.text, "html.parser")
-    results = []
-    for div in soup.select(".result__body, .web-result")[:max_results]:
-        a = div.select_one("a.result__a, h2 a")
-        snippet = div.select_one(".result__snippet, .result__description")
-        if not a:
-            continue
-        href = a.get("href", "")
-        # DuckDuckGo wraps links — try to extract actual URL
-        if "uddg=" in href:
-            try:
-                href = urllib.parse.unquote(href.split("uddg=")[1].split("&")[0])
-            except Exception:
-                pass
-        results.append({
-            "title": a.get_text(strip=True),
-            "url": href,
-            "snippet": snippet.get_text(strip=True) if snippet else "",
-        })
-    return results
+def _search(query: str, max_results: int = 3) -> list[dict]:
+    return web_search(query, max_results=max_results)
 
 
-def _extract_profile(platform: str, result: dict) -> dict | None:
-    url = result.get("url", "")
+def _name_matches(search_name: str, result_name: str) -> bool:
+    """Verifica que el primer nombre del resultado coincida con el buscado."""
+    if not result_name or not search_name:
+        return False
+    search_parts = search_name.upper().split()
+    result_parts = result_name.upper().split()
+    if not search_parts or not result_parts:
+        return False
+    # El primer nombre debe coincidir exactamente
+    if search_parts[0] != result_parts[0]:
+        return False
+    # Todos los apellidos buscados deben estar presentes en el resultado
+    for word in search_parts[1:]:
+        if word not in result_parts:
+            return False
+    return True
+
+
+def _extract_profile(platform: str, search_name: str, result: dict) -> dict | None:
+    url = result.get("href", "")
     title = result.get("title", "")
-    snippet = result.get("snippet", "")
+    snippet = result.get("body", "")
 
     if not url or not any(
         x in url.lower()
@@ -68,13 +47,18 @@ def _extract_profile(platform: str, result: dict) -> dict | None:
     ):
         return None
 
+    extracted_name = title.split(" | ")[0].split(" - ")[0].strip()
+
+    if not _name_matches(search_name, extracted_name):
+        return None
+
     followers = None
     bio = snippet[:200] if snippet else None
 
-    # Try to extract follower count from snippet
     for word in snippet.lower().split():
-        if word.replace(",", "").replace(".", "").isdigit():
-            n = int(word.replace(",", "").replace(".", ""))
+        clean = word.replace(",", "").replace(".", "")
+        if clean.isdigit():
+            n = int(clean)
             if 10 < n < 10_000_000:
                 followers = n
                 break
@@ -82,7 +66,7 @@ def _extract_profile(platform: str, result: dict) -> dict | None:
     return {
         "platform": platform,
         "url": url,
-        "name": title.split(" | ")[0].split(" - ")[0].strip(),
+        "name": extracted_name,
         "bio": bio,
         "followers": followers,
         "public_posts_sample": [],
@@ -93,14 +77,18 @@ def _extract_profile(platform: str, result: dict) -> dict | None:
     name="workers.social_worker.scrape_social",
     bind=True,
     max_retries=1,
-    soft_time_limit=30,
+    soft_time_limit=60,
 )
 def scrape_social(self, request_id: str, persona_data: dict) -> dict:
     nombre = (persona_data.get("nombre_completo") or "").strip()
+    tiene_apellido = bool(
+        (persona_data.get("apellido_paterno") or "").strip()
+        or (persona_data.get("apellido_materno") or "").strip()
+    )
     sources = []
     social_results = []
 
-    if not nombre:
+    if not nombre or not tiene_apellido:
         return {
             "public_profile": {"social_media": [], "news_mentions": [], "public_records": []},
             "internal_history": {"loans": [], "payment_score": None, "references": []},
@@ -108,19 +96,28 @@ def scrape_social(self, request_id: str, persona_data: dict) -> dict:
             "sources_queried": [],
         }
 
+    ai_social = (persona_data.get("ai_queries") or {}).get("social", {})
+
     for platform, query_tpl in PLATFORM_QUERIES.items():
-        query = query_tpl.format(nombre=nombre)
+        queries = ai_social.get(platform, [query_tpl.format(nombre=nombre)])
+        if isinstance(queries, str):
+            queries = [queries]
+
         t0 = time.time()
+        found = False
         try:
-            results = _ddg_search(query, max_results=3)
-            elapsed = int((time.time() - t0) * 1000)
-            found = False
-            for r in results:
-                profile = _extract_profile(platform, r)
-                if profile:
-                    social_results.append(profile)
-                    found = True
+            for q in queries:
+                results = _search(q, max_results=3)
+                for r in results:
+                    profile = _extract_profile(platform, nombre, r)
+                    if profile:
+                        social_results.append(profile)
+                        found = True
+                        break
+                if found:
                     break
+                time.sleep(0.3)
+            elapsed = int((time.time() - t0) * 1000)
             sources.append({
                 "source": platform,
                 "status": "success" if found else "not_found",
@@ -130,8 +127,7 @@ def scrape_social(self, request_id: str, persona_data: dict) -> dict:
             elapsed = int((time.time() - t0) * 1000)
             sources.append({"source": platform, "status": "error", "duration_ms": elapsed})
 
-        # Respect rate limiting — 1 req/sec
-        time.sleep(1)
+        time.sleep(0.3)
 
     return {
         "public_profile": {

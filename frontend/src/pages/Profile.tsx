@@ -9,6 +9,9 @@ import {
   Newspaper,
   FileText,
   Database,
+  Activity,
+  Sparkles,
+  Briefcase,
 } from "lucide-react";
 import { getProfile } from "../lib/api";
 import { formatDate, formatCurrency, sentimentLabel, sentimentColor, cn } from "../lib/utils";
@@ -95,6 +98,102 @@ export default function Profile() {
 
 
 
+      {/* AI Summary */}
+      {profile.ai_summary && (
+        <div className="bg-gradient-to-r from-[#0B2545]/5 to-[#C9A85C]/10 border border-[#C9A85C]/20 rounded-2xl p-5 mb-6">
+          <div className="flex items-start gap-3">
+            <Sparkles size={18} className="text-[#C9A85C] flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-semibold text-[#C9A85C] uppercase tracking-wide mb-1.5">
+                Resumen IA
+              </p>
+              <p className="text-sm text-slate-700 leading-relaxed">
+                {profile.ai_summary}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Employment Info */}
+      {profile.employment_info && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-6">
+          <div className="flex items-center gap-2.5 mb-4">
+            <span className="text-[#C9A85C]"><Briefcase size={17} /></span>
+            <span className="font-semibold text-slate-800">Información Laboral</span>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            {/* Government employee */}
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-4">
+              <p className="text-xs text-slate-500 mb-1">Empleado de gobierno</p>
+              <p className={cn(
+                "text-lg font-bold",
+                profile.employment_info.is_government_employee === true
+                  ? "text-blue-600"
+                  : profile.employment_info.is_government_employee === false
+                  ? "text-slate-600"
+                  : "text-slate-400"
+              )}>
+                {profile.employment_info.is_government_employee === true
+                  ? "Sí"
+                  : profile.employment_info.is_government_employee === false
+                  ? "No"
+                  : "Sin datos"}
+              </p>
+              {profile.employment_info.government_entity && (
+                <p className="text-xs text-slate-500 mt-1">
+                  {profile.employment_info.government_entity}
+                </p>
+              )}
+            </div>
+
+            {/* NSS */}
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-4">
+              <p className="text-xs text-slate-500 mb-1">NSS (Seguro Social)</p>
+              <p className={cn(
+                "text-lg font-bold",
+                profile.employment_info.nss ? "text-slate-800" : "text-slate-400"
+              )}>
+                {profile.employment_info.nss ?? "No encontrado"}
+              </p>
+            </div>
+
+            {/* Employment status */}
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-4">
+              <p className="text-xs text-slate-500 mb-1">Estatus laboral</p>
+              <p className={cn(
+                "text-lg font-bold",
+                profile.employment_info.employment_status === "activo"
+                  ? "text-green-600"
+                  : profile.employment_info.employment_status === "inactivo"
+                  ? "text-red-600"
+                  : "text-slate-400"
+              )}>
+                {profile.employment_info.employment_status === "activo"
+                  ? "Activo"
+                  : profile.employment_info.employment_status === "inactivo"
+                  ? "Inactivo"
+                  : "Desconocido"}
+              </p>
+            </div>
+          </div>
+
+          {/* Evidence */}
+          {(profile.employment_info.evidence?.length ?? 0) > 0 && (
+            <div className="mt-4 pt-3 border-t border-slate-100">
+              <p className="text-xs font-semibold text-slate-500 uppercase mb-2">Evidencia</p>
+              <ul className="space-y-1">
+                {profile.employment_info.evidence.map((e, i) => (
+                  <li key={i} className="text-xs text-slate-600 border-l-2 border-[#C9A85C] pl-2">
+                    {e}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Collapsible sections */}
       <div className="space-y-4">
         <CollapsibleSection
@@ -122,7 +221,7 @@ export default function Profile() {
                     )}
                   </div>
                   {s.bio && <p className="text-sm text-slate-600 mb-2">{s.bio}</p>}
-                  {s.followers !== undefined && (
+                  {s.followers != null && (
                     <p className="text-xs text-slate-500">
                       {s.followers.toLocaleString("es-MX")} seguidores
                     </p>

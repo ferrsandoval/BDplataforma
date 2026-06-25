@@ -6,7 +6,9 @@ import axios from "axios";
 import { cn } from "../lib/utils";
 
 interface FormState {
-  nombre_completo: string;
+  nombre: string;
+  apellido_paterno: string;
+  apellido_materno: string;
   curp: string;
   rfc: string;
   telefono: string;
@@ -14,7 +16,9 @@ interface FormState {
 }
 
 const EMPTY: FormState = {
-  nombre_completo: "",
+  nombre: "",
+  apellido_paterno: "",
+  apellido_materno: "",
   curp: "",
   rfc: "",
   telefono: "",
@@ -33,7 +37,7 @@ interface CurpValidation {
 }
 
 function hasAtLeastOne(form: FormState): boolean {
-  return !!(form.nombre_completo || form.curp || form.rfc || form.telefono);
+  return !!(form.nombre || form.apellido_paterno || form.apellido_materno || form.curp || form.rfc || form.telefono);
 }
 
 function formatRfc(v: string) {
@@ -111,16 +115,44 @@ export default function SearchForm() {
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        {/* Nombre completo */}
-        <div>
+        {/* Nombre(s) */}
+        <div className="sm:col-span-2">
           <label className="block text-sm font-medium text-slate-700 mb-1.5">
-            Nombre completo
+            Nombre(s)
           </label>
           <input
-            name="nombre_completo"
-            value={form.nombre_completo}
+            name="nombre"
+            value={form.nombre}
             onChange={handleChange}
-            placeholder="Ej. Juan García López"
+            placeholder="Ej. Juan Carlos"
+            className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A85C] focus:border-transparent placeholder:text-slate-400"
+          />
+        </div>
+
+        {/* Apellido paterno */}
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            Apellido paterno
+          </label>
+          <input
+            name="apellido_paterno"
+            value={form.apellido_paterno}
+            onChange={handleChange}
+            placeholder="Ej. García"
+            className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A85C] focus:border-transparent placeholder:text-slate-400"
+          />
+        </div>
+
+        {/* Apellido materno */}
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            Apellido materno
+          </label>
+          <input
+            name="apellido_materno"
+            value={form.apellido_materno}
+            onChange={handleChange}
+            placeholder="Ej. López"
             className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A85C] focus:border-transparent placeholder:text-slate-400"
           />
         </div>

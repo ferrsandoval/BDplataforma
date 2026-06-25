@@ -1,8 +1,16 @@
-import { Outlet, NavLink } from "react-router-dom";
-import { LayoutDashboard, Search, ShieldCheck } from "lucide-react";
+import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { LayoutDashboard, Search, ShieldCheck, LogOut } from "lucide-react";
 import { cn } from "../lib/utils";
+import { clearToken } from "../lib/auth";
 
 export default function Layout() {
+  const navigate = useNavigate();
+
+  function handleLogout() {
+    clearToken();
+    navigate("/login", { replace: true });
+  }
+
   return (
     <div className="min-h-screen flex">
       {/* Sidebar */}
@@ -22,8 +30,15 @@ export default function Layout() {
           <NavItem to="/nueva-busqueda" icon={<Search size={18} />} label="Nueva búsqueda" />
         </nav>
 
-        <div className="px-6 py-4 border-t border-navy-800 text-xs text-slate-400">
-          v1.0.0 — EasyDevs
+        <div className="px-3 py-4 border-t border-navy-800">
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-white/10 hover:text-white transition-colors w-full"
+          >
+            <LogOut size={18} />
+            Cerrar sesión
+          </button>
+          <div className="px-3 mt-3 text-xs text-slate-400">v1.0.0 — EasyDevs</div>
         </div>
       </aside>
 

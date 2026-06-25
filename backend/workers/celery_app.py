@@ -1,7 +1,12 @@
 import asyncio
+import os
+import sys
 import time
 from celery import Celery, group
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from celery.signals import worker_init
 from config import settings
 
 celery = Celery(
@@ -24,12 +29,21 @@ celery.conf.update(
 )
 
 
-def _run(coro):
+@worker_init.connect
+def on_worker_init(**kwargs):
+    from services.health import detect_services
     loop = asyncio.new_event_loop()
     try:
-        return loop.run_until_complete(coro)
+        loop.run_until_complete(detect_services())
     finally:
         loop.close()
+
+
+def _reset_mongo_client():
+    import db.mongo as mongo_mod
+    if mongo_mod._client is not None:
+        mongo_mod._client.close()
+        mongo_mod._client = None
 
 
 @celery.task(name="workers.celery_app.run_enrichment_pipeline")
@@ -41,27 +55,67 @@ def run_enrichment_pipeline(request_id: str, persona_data: dict):
     from workers.blacklist_worker import check_blacklists
     from workers.internal_worker import query_internal
 
-    _run(update_profile(request_id, {"status": "processing"}))
-    start = time.time()
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(update_profile(request_id, {"status": "processing"}))
+        start = time.time()
 
-    jobs = group(
-        scrape_social.s(request_id, persona_data),
-        scrape_news.s(request_id, persona_data),
-        scrape_records.s(request_id, persona_data),
-        check_blacklists.s(request_id, persona_data),
-        query_internal.s(request_id, persona_data),
-    )
+        jobs = group(
+            scrape_social.s(request_id, persona_data),
+            scrape_news.s(request_id, persona_data),
+            scrape_records.s(request_id, persona_data),
+            check_blacklists.s(request_id, persona_data),
+            query_internal.s(request_id, persona_data),
+        )
 
-    result = jobs.apply()
-    worker_results = result.get(timeout=120, disable_sync_subtasks=False)
+        result = jobs.apply()
+        worker_results = result.get(timeout=120, disable_sync_subtasks=False)
 
-    elapsed_ms = int((time.time() - start) * 1000)
-    merged = _merge_results(worker_results)
-    merged["status"] = "complete"
-    merged["processing_duration_ms"] = elapsed_ms
+        elapsed_ms = int((time.time() - start) * 1000)
+        merged = _merge_results(worker_results)
+        merged = _ai_enrich(persona_data, merged)
+        merged["status"] = "complete"
+        merged["processing_duration_ms"] = elapsed_ms
 
-    _run(update_profile(request_id, merged))
+        loop.run_until_complete(update_profile(request_id, merged))
+    finally:
+        loop.close()
+        _reset_mongo_client()
     return request_id
+
+
+def _ai_enrich(persona_data: dict, merged: dict) -> dict:
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        from services.ai_analyzer import filter_and_analyze, generate_summary, extract_employment_info
+        from services.scorer import compute_risk
+
+        merged = filter_and_analyze(persona_data, merged)
+
+        pp = merged.get("public_profile", {})
+        ih = merged.get("internal_history", {})
+        risk = merged.get("risk_summary", {})
+        new_risk = compute_risk(
+            blacklist_hit=risk.get("blacklist_hit", False),
+            judicial_records=risk.get("judicial_records", False),
+            social_count=len(pp.get("social_media", [])),
+            payment_score=ih.get("payment_score"),
+            news_sentiments=[n.get("sentiment") for n in pp.get("news_mentions", [])],
+            loans=ih.get("loans", []),
+        )
+        merged["risk_summary"] = new_risk
+
+        employment = extract_employment_info(persona_data, merged)
+        if employment:
+            merged["employment_info"] = employment
+
+        summary = generate_summary(persona_data, merged)
+        if summary:
+            merged["ai_summary"] = summary
+    except Exception:
+        logger.exception("AI enrichment failed, continuing with raw results")
+    return merged
 
 
 def _merge_results(results: list) -> dict:

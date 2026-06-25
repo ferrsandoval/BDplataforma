@@ -1,18 +1,27 @@
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, computed_field
 from typing import Optional, List
 from datetime import datetime
 
 
 class EnrichmentRequest(BaseModel):
-    nombre_completo: Optional[str] = Field(default=None)
+    nombre: Optional[str] = Field(default=None)
+    apellido_paterno: Optional[str] = Field(default=None)
+    apellido_materno: Optional[str] = Field(default=None)
     curp: Optional[str] = Field(default=None, max_length=18)
     rfc: Optional[str] = Field(default=None, max_length=13)
     telefono: Optional[str] = Field(default=None, max_length=15)
     operador_id: str = "OP-001"
 
+    @computed_field
+    @property
+    def nombre_completo(self) -> Optional[str]:
+        parts = [p for p in [self.nombre, self.apellido_paterno, self.apellido_materno] if p]
+        return " ".join(parts) if parts else None
+
     @model_validator(mode="after")
     def at_least_one_field(self) -> "EnrichmentRequest":
-        if not any([self.nombre_completo, self.curp, self.rfc, self.telefono]):
+        has_nombre = any([self.nombre, self.apellido_paterno, self.apellido_materno])
+        if not any([has_nombre, self.curp, self.rfc, self.telefono]):
             raise ValueError("Se requiere al menos un campo: nombre, CURP, RFC o teléfono.")
         return self
 
@@ -61,6 +70,14 @@ class Reference(BaseModel):
     phone: str
 
 
+class EmploymentInfo(BaseModel):
+    is_government_employee: Optional[bool] = None
+    government_entity: Optional[str] = None
+    nss: Optional[str] = None
+    employment_status: Optional[str] = None  # activo | inactivo | desconocido
+    evidence: List[str] = []
+
+
 class RiskSummary(BaseModel):
     blacklist_hit: bool = False
     judicial_records: bool = False
@@ -93,6 +110,8 @@ class EnrichedProfile(BaseModel):
     status: str
     processing_duration_ms: Optional[int] = None
     input: dict
+    ai_summary: Optional[str] = None
+    employment_info: EmploymentInfo = EmploymentInfo()
     risk_summary: RiskSummary = RiskSummary()
     public_profile: PublicProfile = PublicProfile()
     internal_history: InternalHistory = InternalHistory()
