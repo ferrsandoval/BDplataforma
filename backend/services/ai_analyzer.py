@@ -163,12 +163,38 @@ def generate_search_queries(person_info: dict) -> Optional[dict]:
 # 2. Relevance filtering + sentiment re-analysis
 # ---------------------------------------------------------------------------
 
+def _name_appears(nombre_completo: str, text: str) -> bool:
+    """Check if the person's name (first name + at least one surname) appears in text."""
+    if not nombre_completo or not text:
+        return False
+    text_upper = text.upper()
+    parts = nombre_completo.upper().split()
+    if len(parts) < 2:
+        return parts[0] in text_upper if parts else False
+    # Get nombre(s) and apellidos from the full name
+    # Try matching first name + any surname
+    nombre_parts = []
+    apellidos = []
+    # Heuristic: last 2 words are apellidos, rest is nombre
+    if len(parts) >= 3:
+        apellidos = parts[-2:]
+        nombre_parts = parts[:-2]
+    else:
+        apellidos = parts[1:]
+        nombre_parts = parts[:1]
+    # First name must appear
+    first_name = nombre_parts[0] if nombre_parts else ""
+    if first_name and first_name not in text_upper:
+        return False
+    # At least one apellido must appear
+    return any(ap in text_upper for ap in apellidos)
+
+
 def filter_and_analyze(person_info: dict, merged: dict) -> dict:
     """
-    Sends all raw results to Claude to:
-      - discard results that do NOT belong to the target person
-      - re-classify news sentiment with real NLP instead of keywords
-    Returns a *new* merged dict; falls back to the original on failure.
+    Two-layer filter:
+      1. Hard name check — discard results that don't mention the person's name
+      2. AI filter — re-classify sentiment on remaining results
     """
     pp = merged.get("public_profile", {})
     social = pp.get("social_media", [])
@@ -182,84 +208,54 @@ def filter_and_analyze(person_info: dict, merged: dict) -> dict:
     curp = person_info.get("curp", "")
     rfc = person_info.get("rfc", "")
 
-    compact = {
-        "social": [
-            {"i": i, "platform": s.get("platform"), "name": s.get("name"),
-             "bio": (s.get("bio") or "")[:80]}
-            for i, s in enumerate(social)
-        ],
-        "news": [
-            {"i": i, "title": n.get("title"), "source": n.get("source")}
-            for i, n in enumerate(news)
-        ],
-        "records": [
-            {"i": i, "type": r.get("type"),
-             "desc": (r.get("description") or "")[:120]}
-            for i, r in enumerate(records)
-        ],
-    }
+    # Layer 1: Hard name filter
+    if nombre:
+        social = [s for s in social if _name_appears(nombre, (s.get("name") or "") + " " + (s.get("bio") or ""))]
+        news = [n for n in news if _name_appears(nombre, (n.get("title") or ""))]
+        records = [r for r in records if (
+            _name_appears(nombre, (r.get("description") or ""))
+            or (curp and curp in (r.get("description") or ""))
+            or (rfc and rfc in (r.get("description") or ""))
+        )]
 
-    system = (
-        "Eres un analista de inteligencia que filtra resultados de búsqueda web. "
-        "Determina cuáles resultados realmente pertenecen a la persona buscada "
-        "(descarta los que son de otra persona o irrelevantes) y clasifica el "
-        "sentimiento real de cada noticia conservada. "
-        "Responde SOLO con JSON válido, sin texto adicional."
-    )
-    prompt = (
-        f"Persona buscada:\n"
-        f"  Nombre: {nombre}\n"
-        f"  CURP: {curp}\n"
-        f"  RFC: {rfc}\n\n"
-        f"Resultados crudos:\n{json.dumps(compact, ensure_ascii=False)}\n\n"
-        "Responde con este formato exacto:\n"
-        '{"social_keep":[0,2],"news_keep":[0,1],"records_keep":[0],'
-        '"news_sentiments":{"0":"negative","1":"neutral"}}\n\n'
-        "Reglas:\n"
-        "- CONSERVA los resultados a menos que estés SEGURO de que pertenecen a otra persona\n"
-        "- En caso de duda, SIEMPRE conserva el resultado\n"
-        "- Redes sociales: conserva si el nombre coincide parcialmente (nombre + al menos un apellido)\n"
-        "- Registros públicos: conserva si mencionan el nombre, CURP o RFC de la persona\n"
-        "- Para sentimiento: positive, neutral o negative basado en el titular"
-    )
+    if not social and not news and not records:
+        result = {**merged}
+        result["public_profile"] = {"social_media": [], "news_mentions": [], "public_records": []}
+        return result
 
-    text = _call(system, prompt, max_tokens=512)
-    if not text:
-        return merged
+    # Layer 2: AI sentiment analysis on filtered results
+    compact_news = [
+        {"i": i, "title": n.get("title"), "source": n.get("source")}
+        for i, n in enumerate(news)
+    ]
 
-    parsed = _extract_json(text)
-    if not parsed:
-        return merged
-
-    keep_s = set(parsed.get("social_keep", range(len(social))))
-    keep_n = set(parsed.get("news_keep", range(len(news))))
-    keep_r = set(parsed.get("records_keep", range(len(records))))
-    sentiments = parsed.get("news_sentiments", {})
-
-    filtered_news = []
-    for i, n in enumerate(news):
-        if i in keep_n:
-            s = sentiments.get(str(i))
-            if s in ("positive", "neutral", "negative"):
-                n = {**n, "sentiment": s}
-            filtered_news.append(n)
-
-    filtered_social = [s for i, s in enumerate(social) if i in keep_s]
-    filtered_records = [r for i, r in enumerate(records) if i in keep_r]
-
-    # Safety: if AI filtered everything out, keep originals
-    if social and not filtered_social:
-        filtered_social = social
-    if records and not filtered_records:
-        filtered_records = records
-    if news and not filtered_news:
-        filtered_news = news
+    if compact_news:
+        system = (
+            "Eres un analista que clasifica el sentimiento de noticias. "
+            "Responde SOLO con JSON válido, sin texto adicional."
+        )
+        prompt = (
+            f"Clasifica el sentimiento de cada noticia sobre {nombre}.\n\n"
+            f"Noticias:\n{json.dumps(compact_news, ensure_ascii=False)}\n\n"
+            "Responde con este JSON:\n"
+            '{"sentiments":{"0":"negative","1":"neutral"}}\n\n'
+            "Usa: positive, neutral, o negative."
+        )
+        text = _call(system, prompt, max_tokens=256)
+        if text:
+            parsed = _extract_json(text)
+            if parsed:
+                sentiments = parsed.get("sentiments", {})
+                for i, n in enumerate(news):
+                    s = sentiments.get(str(i))
+                    if s in ("positive", "neutral", "negative"):
+                        news[i] = {**n, "sentiment": s}
 
     result = {**merged}
     result["public_profile"] = {
-        "social_media": filtered_social,
-        "news_mentions": filtered_news,
-        "public_records": filtered_records,
+        "social_media": social,
+        "news_mentions": news,
+        "public_records": records,
     }
     return result
 
