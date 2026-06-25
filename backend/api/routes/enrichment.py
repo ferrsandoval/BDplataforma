@@ -10,10 +10,31 @@ from services.cache import get_cached_request_id, set_cached_request_id
 router = APIRouter()
 
 
-def _try_celery(request_id: str, persona_data: dict) -> bool:
-    """Send task to Celery only when Redis is confirmed available."""
+_celery_available: bool | None = None
+
+
+def _check_celery_workers() -> bool:
+    """Check once if any Celery worker is actually running."""
+    global _celery_available
+    if _celery_available is not None:
+        return _celery_available
     from services.health import REDIS_OK
     if not REDIS_OK:
+        _celery_available = False
+        return False
+    try:
+        from workers.celery_app import celery
+        inspector = celery.control.inspect(timeout=2.0)
+        active = inspector.active_queues()
+        _celery_available = bool(active)
+    except Exception:
+        _celery_available = False
+    return _celery_available
+
+
+def _try_celery(request_id: str, persona_data: dict) -> bool:
+    """Send task to Celery only when a worker is actually running."""
+    if not _check_celery_workers():
         return False
     try:
         from workers.celery_app import run_enrichment_pipeline
