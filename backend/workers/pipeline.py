@@ -36,11 +36,14 @@ async def run_pipeline_async(request_id: str, persona_data: dict) -> None:
         except asyncio.TimeoutError:
             logger.warning("Worker %s timed out after %ds", kind, timeout)
             return {}
+        except Exception as e:
+            logger.exception("Worker %s crashed: %s", kind, e)
+            return {}
 
     results = await asyncio.gather(
-        _timed_worker("social", 30),
+        _timed_worker("social", 45),
         _timed_worker("news", 30),
-        _timed_worker("records", 45),
+        _timed_worker("records", 60),
         _timed_worker("blacklist", 20),
         _timed_worker("internal", 10),
         return_exceptions=True,

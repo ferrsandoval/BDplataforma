@@ -163,31 +163,16 @@ def generate_search_queries(person_info: dict) -> Optional[dict]:
 # 2. Relevance filtering + sentiment re-analysis
 # ---------------------------------------------------------------------------
 
-def _name_appears(nombre_completo: str, text: str) -> bool:
-    """Check if the person's name (first name + at least one surname) appears in text."""
-    if not nombre_completo or not text:
+def _name_appears_in(person_info: dict, text: str) -> bool:
+    """Check if the person's apellido_paterno appears in text. Uses structured fields."""
+    if not text:
         return False
     text_upper = text.upper()
-    parts = nombre_completo.upper().split()
-    if len(parts) < 2:
-        return parts[0] in text_upper if parts else False
-    # Get nombre(s) and apellidos from the full name
-    # Try matching first name + any surname
-    nombre_parts = []
-    apellidos = []
-    # Heuristic: last 2 words are apellidos, rest is nombre
-    if len(parts) >= 3:
-        apellidos = parts[-2:]
-        nombre_parts = parts[:-2]
-    else:
-        apellidos = parts[1:]
-        nombre_parts = parts[:1]
-    # First name must appear
-    first_name = nombre_parts[0] if nombre_parts else ""
-    if first_name and first_name not in text_upper:
-        return False
-    # At least one apellido must appear
-    return any(ap in text_upper for ap in apellidos)
+    ap = (person_info.get("apellido_paterno") or "").strip().upper()
+    if not ap:
+        nombre = (person_info.get("nombre_completo") or "").strip().upper()
+        return bool(nombre and nombre in text_upper)
+    return ap in text_upper
 
 
 def filter_and_analyze(person_info: dict, merged: dict) -> dict:
@@ -208,12 +193,12 @@ def filter_and_analyze(person_info: dict, merged: dict) -> dict:
     curp = person_info.get("curp", "")
     rfc = person_info.get("rfc", "")
 
-    # Layer 1: Hard name filter
+    # Layer 1: Hard name filter — only keep results that mention the apellido_paterno
     if nombre:
-        social = [s for s in social if _name_appears(nombre, (s.get("name") or "") + " " + (s.get("bio") or ""))]
-        news = [n for n in news if _name_appears(nombre, (n.get("title") or ""))]
+        social = [s for s in social if _name_appears_in(person_info, (s.get("name") or "") + " " + (s.get("bio") or ""))]
+        news = [n for n in news if _name_appears_in(person_info, (n.get("title") or ""))]
         records = [r for r in records if (
-            _name_appears(nombre, (r.get("description") or ""))
+            _name_appears_in(person_info, (r.get("description") or ""))
             or (curp and curp in (r.get("description") or ""))
             or (rfc and rfc in (r.get("description") or ""))
         )]
