@@ -1,36 +1,116 @@
 @import "tailwindcss";
 
 @theme {
-  --color-navy-50: #e8edf5;
-  --color-navy-100: #c5d0e3;
-  --color-navy-200: #9fb0ce;
-  --color-navy-300: #7890b9;
-  --color-navy-400: #5a78aa;
-  --color-navy-500: #3c619b;
-  --color-navy-600: #2a4f8a;
-  --color-navy-700: #1a3d74;
-  --color-navy-800: #0f2d60;
-  --color-navy-900: #0B2545;
-  --color-navy-950: #071830;
+  /* Typography — ProfilerMX v2 */
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
 
-  --color-amber-gold: #C9A85C;
-  --color-amber-gold-light: #ddc17e;
-  --color-amber-gold-dark: #a8863a;
+  /* Core palette — charcoal + slate-blue */
+  --color-ink: #1b1e24; /* sidebar, dark buttons, display headings */
+  --color-ink-soft: #1d2127; /* body text */
+  --color-accent: #34506b; /* slate-blue accent (links, highlights) */
+  --color-accent-strong: #22384c;
+  --color-accent-soft: #eaf0f6;
+  --color-canvas: #f3f4f6; /* app background */
+  --color-line: #e2e4e8; /* hairline borders */
+  --color-line-soft: #eaecef;
+
+  /* Semantic status colors */
+  --color-ok: #2f6b4f;
+  --color-ok-soft: #edf5f0;
+  --color-info: #315e86;
+  --color-info-soft: #edf3f9;
+  --color-muted: #55606e;
+  --color-muted-soft: #f1f3f5;
+  --color-warn: #8a6516;
+  --color-warn-soft: #faf4e6;
+  --color-danger: #98342f;
+  --color-danger-soft: #f7ecea;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
 }
 
 body {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background-color: #f1f5f9;
-  color: #0f172a;
+  font-family: var(--font-sans);
+  background-color: #f3f4f6;
+  color: #1d2127;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.scrollbar-thin::-webkit-scrollbar {
-  width: 4px;
+a {
+  color: #34506b;
+  text-decoration: none;
 }
-.scrollbar-thin::-webkit-scrollbar-track {
+a:hover {
+  color: #22384c;
+}
+
+::selection {
+  background: #34506b;
+  color: #fff;
+}
+
+/* Refined scrollbars */
+.scrollbar-thin::-webkit-scrollbar,
+.scroll::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+.scrollbar-thin::-webkit-scrollbar-track,
+.scroll::-webkit-scrollbar-track {
   background: transparent;
 }
-.scrollbar-thin::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+.scrollbar-thin::-webkit-scrollbar-thumb,
+.scroll::-webkit-scrollbar-thumb {
+  background: #cdd1d8;
   border-radius: 9999px;
+}
+
+@keyframes pmx-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes pmx-fade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.pmx-pulse {
+  animation: pmx-pulse 1.4s infinite;
+}
+.pmx-fade {
+  animation: pmx-fade 0.16s ease;
+}
+
+/* Print — only the document sheet survives when printing a ficha */
+@media print {
+  body {
+    background: #fff;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-sheet {
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 32px 40px !important;
+    width: 100% !important;
+  }
 }

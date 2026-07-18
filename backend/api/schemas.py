@@ -137,3 +137,5 @@ class StatsResponse(BaseModel):
     total_searches: int
     avg_processing_time_ms: float
     risk_distribution: dict
+    in_process: int = 0
+    completed_today: int = 0

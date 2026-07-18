@@ -125,7 +125,7 @@ export default function SearchForm() {
             value={form.nombre}
             onChange={handleChange}
             placeholder="Ej. Juan Carlos"
-            className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A85C] focus:border-transparent placeholder:text-slate-400"
+            className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:text-slate-400"
           />
         </div>
 
@@ -139,7 +139,7 @@ export default function SearchForm() {
             value={form.apellido_paterno}
             onChange={handleChange}
             placeholder="Ej. García"
-            className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A85C] focus:border-transparent placeholder:text-slate-400"
+            className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:text-slate-400"
           />
         </div>
 
@@ -153,7 +153,7 @@ export default function SearchForm() {
             value={form.apellido_materno}
             onChange={handleChange}
             placeholder="Ej. López"
-            className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A85C] focus:border-transparent placeholder:text-slate-400"
+            className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:text-slate-400"
           />
         </div>
 
@@ -168,7 +168,7 @@ export default function SearchForm() {
               placeholder="18 caracteres"
               maxLength={18}
               className={cn(
-                "w-full rounded-lg border px-3.5 py-2.5 text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-[#C9A85C] focus:border-transparent placeholder:text-slate-400 placeholder:font-sans",
+                "w-full rounded-lg border px-3.5 py-2.5 text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:text-slate-400 placeholder:font-sans",
                 curpVal?.valid === true && "border-green-400 bg-green-50",
                 curpVal?.valid === false && "border-red-400 bg-red-50",
                 !curpVal && "border-slate-300"
@@ -203,7 +203,7 @@ export default function SearchForm() {
             onChange={handleChange}
             placeholder="12 o 13 caracteres"
             maxLength={13}
-            className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-[#C9A85C] focus:border-transparent placeholder:text-slate-400 placeholder:font-sans"
+            className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:text-slate-400 placeholder:font-sans"
           />
         </div>
 
@@ -217,7 +217,7 @@ export default function SearchForm() {
             placeholder="10 dígitos"
             type="tel"
             maxLength={15}
-            className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A85C] focus:border-transparent placeholder:text-slate-400"
+            className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:text-slate-400"
           />
         </div>
       </div>
@@ -231,17 +231,17 @@ export default function SearchForm() {
       <button
         type="submit"
         disabled={!canSubmit}
-        className="w-full flex items-center justify-center gap-2 bg-[#0B2545] hover:bg-[#1a3d74] text-white font-semibold py-3 px-6 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full flex items-center justify-center gap-2 bg-ink hover:bg-[#2A2E36] text-white font-semibold py-3 px-6 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {loading ? (
           <>
             <Loader2 size={18} className="animate-spin" />
-            Iniciando búsqueda…
+            Iniciando investigación…
           </>
         ) : (
           <>
             <Search size={18} />
-            Iniciar búsqueda
+            Iniciar investigación
           </>
         )}
       </button>

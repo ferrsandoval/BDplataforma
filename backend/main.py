@@ -11,6 +11,14 @@ from services.health import detect_services
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await detect_services()
+    import os
+    if os.getenv("SEED_EXAMPLES", "").lower() in ("1", "true", "yes"):
+        try:
+            from services.seed import seed_examples
+            n = await seed_examples()
+            print(f"[seed] {n} expedientes de ejemplo cargados")
+        except Exception as exc:  # pragma: no cover - dev convenience only
+            print(f"[seed] error al sembrar ejemplos: {exc}")
     yield
     try:
         from db.postgres import close_pool

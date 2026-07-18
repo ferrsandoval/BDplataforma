@@ -1,4 +1,4 @@
-export type ProfileStatus = "pending" | "processing" | "complete" | "error";
+export type ProfileStatus = "pending" | "processing" | "complete" | "partial" | "error";
 export type SourceStatus = "success" | "not_found" | "error" | "timeout";
 export type Sentiment = "positive" | "neutral" | "negative";
 
@@ -97,6 +97,8 @@ export interface ProfileListResponse {
 export interface StatsResponse {
   total_searches: number;
   avg_processing_time_ms: number;
+  in_process?: number;
+  completed_today?: number;
 }
 
 export interface EnrichmentRequest {

@@ -48,32 +48,26 @@ export function sentimentColor(sentiment?: Sentiment): string {
   return sentiment ? colors[sentiment] : "text-slate-400";
 }
 
+export interface StatusMeta {
+  label: string;
+  color: string; // text
+  bg: string;
+  border: string;
+  dot: string;
+}
+
+/** Semantic palette for expediente statuses (ProfilerMX v2). */
+export function statusMeta(status?: string): StatusMeta {
+  const map: Record<string, StatusMeta> = {
+    complete: { label: "Completo", color: "#2F6B4F", bg: "#EDF5F0", border: "#CBE3D5", dot: "#3E8E6B" },
+    processing: { label: "Procesando", color: "#315E86", bg: "#EDF3F9", border: "#C9DCEC", dot: "#4A7FB0" },
+    pending: { label: "Pendiente", color: "#55606E", bg: "#F1F3F5", border: "#E2E5EA", dot: "#9AA2AE" },
+    partial: { label: "Parcial", color: "#8A6516", bg: "#FAF4E6", border: "#EAD9B0", dot: "#C79A3A" },
+    error: { label: "Error", color: "#98342F", bg: "#F7ECEA", border: "#E6C6C2", dot: "#C1554E" },
+  };
+  return map[status ?? ""] ?? map.pending;
+}
+
 export function statusLabel(status: ProfileStatus): string {
-  const labels: Record<ProfileStatus, string> = {
-    pending: "Pendiente",
-    processing: "Procesando",
-    complete: "Completado",
-    error: "Error",
-  };
-  return labels[status];
-}
-
-export function statusColor(status: ProfileStatus): string {
-  const colors: Record<ProfileStatus, string> = {
-    pending: "text-slate-600",
-    processing: "text-blue-600",
-    complete: "text-green-600",
-    error: "text-red-600",
-  };
-  return colors[status];
-}
-
-export function statusBg(status: ProfileStatus): string {
-  const colors: Record<ProfileStatus, string> = {
-    pending: "bg-slate-100 text-slate-800",
-    processing: "bg-blue-100 text-blue-800",
-    complete: "bg-green-100 text-green-800",
-    error: "bg-red-100 text-red-800",
-  };
-  return colors[status];
+  return statusMeta(status).label;
 }

@@ -1,26 +1,23 @@
-import { cn, statusLabel } from "../lib/utils";
+import { statusMeta } from "../lib/utils";
 import type { ProfileStatus } from "../lib/types";
 
-const styles: Record<ProfileStatus, string> = {
-  pending: "bg-slate-100 text-slate-600 border-slate-200",
-  processing: "bg-blue-100 text-blue-700 border-blue-200",
-  complete: "bg-green-100 text-green-700 border-green-200",
-  partial: "bg-yellow-100 text-yellow-700 border-yellow-200",
-  error: "bg-red-100 text-red-700 border-red-200",
-};
-
 export default function StatusBadge({ status }: { status: ProfileStatus }) {
+  const m = statusMeta(status);
   return (
     <span
-      className={cn(
-        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border",
-        styles[status] ?? styles.pending
-      )}
+      className="inline-flex items-center gap-1.5 text-[11px] font-semibold whitespace-nowrap border rounded-md"
+      style={{
+        color: m.color,
+        background: m.bg,
+        borderColor: m.border,
+        padding: "3px 9px 3px 8px",
+      }}
     >
-      {status === "processing" && (
-        <span className="inline-block w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-      )}
-      {statusLabel(status)}
+      <span
+        className={status === "processing" ? "pmx-pulse" : undefined}
+        style={{ width: 6, height: 6, borderRadius: "50%", background: m.dot }}
+      />
+      {m.label}
     </span>
   );
 }

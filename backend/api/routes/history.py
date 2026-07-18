@@ -15,9 +15,12 @@ async def list_profiles_endpoint(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     risk_level: Optional[str] = Query(None, pattern="^(low|medium|high)$"),
+    q: Optional[str] = Query(None),
     _user: str = Depends(verify_token),
 ):
-    result = await list_profiles(page=page, limit=limit, date_from=date_from, date_to=date_to, risk_level=risk_level)
+    result = await list_profiles(
+        page=page, limit=limit, date_from=date_from, date_to=date_to, risk_level=risk_level, q=q
+    )
     return result
 
 

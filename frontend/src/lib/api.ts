@@ -50,6 +50,7 @@ export async function listProfiles(params: {
   limit?: number;
   date_from?: string;
   date_to?: string;
+  q?: string;
 }): Promise<ProfileListResponse> {
   const response = await client.get("/profiles", {
     params: {
@@ -57,6 +58,7 @@ export async function listProfiles(params: {
       limit: params.limit ?? 20,
       ...(params.date_from && { date_from: params.date_from }),
       ...(params.date_to && { date_to: params.date_to }),
+      ...(params.q && { q: params.q }),
     },
   });
   return response.data;
