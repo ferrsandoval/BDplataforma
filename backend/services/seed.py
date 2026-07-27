@@ -253,8 +253,11 @@ EXAMPLES = [
 
 async def seed_examples() -> int:
     """Insert example expedientes into the store. Returns the number seeded."""
-    from db.mongo import create_profile
+    from db.mongo import create_profile, delete_profile
 
     for doc in EXAMPLES:
+        # create_profile inserts unconditionally and request_id has no unique
+        # index, so drop any previous copy first to keep re-runs idempotent.
+        await delete_profile(doc["request_id"])
         await create_profile(dict(doc))
     return len(EXAMPLES)
